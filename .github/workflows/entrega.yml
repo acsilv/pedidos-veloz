@@ -51,7 +51,7 @@ jobs:
     environment: producao
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@v5
         with:
           version: v1.31.2
       - name: Configurar acesso ao cluster
