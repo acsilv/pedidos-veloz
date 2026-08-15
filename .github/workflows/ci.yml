@@ -71,7 +71,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Procurar segredos acidentais
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verificar arquivos e dependências
