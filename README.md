@@ -10,9 +10,9 @@ imagens, CI/CD, segurança, observabilidade e infraestrutura como código.
 
 ## Vídeo da apresentação
 
-O vídeo será publicado no YouTube após a gravação.
+Apresentação do projeto no YouTube.
 
-**Link:** `[INSERIR LINK DO YOUTUBE]`
+**Link:** https://youtu.be/uwSEwUH-t7k
 
 ## Arquitetura
 
