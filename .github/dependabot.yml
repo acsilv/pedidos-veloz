@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      dependencias-python: {patterns: ["*"]}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: docker
+    directory: /servicos/gateway
+    schedule: {interval: monthly}
+  - package-ecosystem: docker
+    directory: /servicos/pedidos
+    schedule: {interval: monthly}
+  - package-ecosystem: docker
+    directory: /servicos/estoque
+    schedule: {interval: monthly}
+  - package-ecosystem: docker
+    directory: /servicos/pagamentos
+    schedule: {interval: monthly}

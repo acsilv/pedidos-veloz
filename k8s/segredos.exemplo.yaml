@@ -1,0 +1,16 @@
+# Copie apenas para referência. Não aplique este arquivo sem trocar os valores.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: segredos-plataforma
+  namespace: pedidos-veloz
+type: Opaque
+stringData:
+  POSTGRES_USUARIO: veloz
+  POSTGRES_SENHA: TROQUE_ESTA_SENHA
+  RABBITMQ_USUARIO: veloz
+  RABBITMQ_SENHA: TROQUE_ESTA_SENHA
+  RABBITMQ_URL: amqp://veloz:TROQUE_ESTA_SENHA@rabbitmq:5672/
+  BANCO_PEDIDOS_URL: postgresql+psycopg://veloz:TROQUE_ESTA_SENHA@postgres:5432/pedidos
+  BANCO_ESTOQUE_URL: postgresql+psycopg://veloz:TROQUE_ESTA_SENHA@postgres:5432/estoque
+  BANCO_PAGAMENTOS_URL: postgresql+psycopg://veloz:TROQUE_ESTA_SENHA@postgres:5432/pagamentos

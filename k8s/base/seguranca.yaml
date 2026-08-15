@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: negar-por-padrao}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: permitir-dns}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: permitir-gateway}
+spec:
+  podSelector: {matchLabels: {app: gateway}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to: [{podSelector: {matchExpressions: [{key: app, operator: In, values: [pedidos, estoque]}]}}]
+      ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8002}]
+    - to: [{podSelector: {matchLabels: {app: otel-collector}}}]
+      ports: [{protocol: TCP, port: 4317}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: permitir-aplicacoes}
+spec:
+  podSelector: {matchLabels: {componente: aplicacao}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: gateway}}}]
+      ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8002}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: postgres}}}]
+      ports: [{protocol: TCP, port: 5432}]
+    - to: [{podSelector: {matchLabels: {app: rabbitmq}}}]
+      ports: [{protocol: TCP, port: 5672}]
+    - to: [{podSelector: {matchLabels: {app: otel-collector}}}]
+      ports: [{protocol: TCP, port: 4317}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: permitir-dados}
+spec:
+  podSelector: {matchLabels: {componente: dados}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {componente: aplicacao}}}]
+      ports: [{protocol: TCP, port: 5432}, {protocol: TCP, port: 5672}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: permitir-otel}
+spec:
+  podSelector: {matchLabels: {app: otel-collector}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {componente: aplicacao}}}]
+      ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]

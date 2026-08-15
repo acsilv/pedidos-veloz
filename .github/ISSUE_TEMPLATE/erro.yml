@@ -1,0 +1,16 @@
+name: Relatar erro
+description: Informe um comportamento inesperado do projeto.
+title: "[Erro] "
+labels: [bug]
+body:
+  - type: textarea
+    id: descricao
+    attributes: {label: Descrição, description: "O que aconteceu?"}
+    validations: {required: true}
+  - type: textarea
+    id: reproducao
+    attributes: {label: Como reproduzir, description: Liste os comandos e passos usados.}
+    validations: {required: true}
+  - type: textarea
+    id: ambiente
+    attributes: {label: Ambiente, description: Sistema operacional e versões do Docker/Kubernetes.}

@@ -1,0 +1,7 @@
+{
+  "cliente_id": "cliente-demonstracao",
+  "token_pagamento": "tok_aprovado_1234",
+  "itens": [
+    {"sku": "SKU-MOCHILA", "quantidade": 50, "preco_unitario": "159.90"}
+  ]
+}

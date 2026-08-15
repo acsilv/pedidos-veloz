@@ -1,0 +1,7 @@
+{
+  "cliente_id": "cliente-demonstracao",
+  "token_pagamento": "tok_aprovado_1234",
+  "itens": [
+    {"sku": "SKU-CAMISETA", "quantidade": 2, "preco_unitario": "79.90"}
+  ]
+}

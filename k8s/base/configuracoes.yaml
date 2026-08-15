@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configuracao-aplicacao
+data:
+  NIVEL_LOG: INFO
+  AMBIENTE: producao
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  URL_PEDIDOS: http://pedidos:8001
+  URL_ESTOQUE: http://estoque:8002
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inicializacao-postgres
+data:
+  10-inicializar-bancos.sh: |
+    #!/bin/sh
+    set -eu
+    for banco in pedidos estoque pagamentos; do
+      psql --set ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
+        -c "CREATE DATABASE $banco OWNER $POSTGRES_USER;" || true
+    done
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configuracao-otel
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 192
+      batch: {}
+    exporters:
+      debug:
+        verbosity: basic
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]

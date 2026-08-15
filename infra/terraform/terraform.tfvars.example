@@ -1,0 +1,4 @@
+projeto_gcp       = "SEU_PROJETO_GCP"
+regiao            = "southamerica-east1"
+nome_cluster      = "pedidos-veloz"
+proteger_exclusao = true
