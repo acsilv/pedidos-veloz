@@ -1,10 +1,10 @@
-FROM python:3.12.11-slim AS construtor
+FROM python:3.14.7-slim AS construtor
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /opt/venv
 COPY requirements.txt /tmp/requirements.txt
 RUN /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 
-FROM python:3.12.11-slim AS execucao
+FROM python:3.14.7-slim AS execucao
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
