@@ -1,0 +1,73 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: gateway}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: gateway}
+  minReplicas: 2
+  maxReplicas: 6
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 300}
+    scaleUp: {stabilizationWindowSeconds: 30}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: pedidos}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: pedidos}
+  minReplicas: 2
+  maxReplicas: 6
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 300}
+    scaleUp: {stabilizationWindowSeconds: 30}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: estoque}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: estoque}
+  minReplicas: 2
+  maxReplicas: 6
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 300}
+    scaleUp: {stabilizationWindowSeconds: 30}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: pagamentos}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: pagamentos}
+  minReplicas: 2
+  maxReplicas: 6
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 300}
+    scaleUp: {stabilizationWindowSeconds: 30}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: gateway}
+spec: {minAvailable: 1, selector: {matchLabels: {app: gateway}}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: pedidos}
+spec: {minAvailable: 1, selector: {matchLabels: {app: pedidos}}}

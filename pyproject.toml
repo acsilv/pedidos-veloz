@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+addopts = "-q --disable-warnings --strict-markers"
+testpaths = ["testes"]
+pythonpath = ["."]
+markers = [
+  "integracao: testes que precisam do ambiente Docker Compose",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["relatorios/finais"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+exclude = ["relatorios/"]

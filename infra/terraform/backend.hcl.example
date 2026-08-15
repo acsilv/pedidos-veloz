@@ -1,0 +1,2 @@
+bucket = "SEU_BUCKET_DE_STATE"
+prefix = "pedidos-veloz/producao"

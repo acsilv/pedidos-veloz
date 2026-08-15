@@ -1,0 +1,103 @@
+name: Publicação e entrega
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Publicar ${{ matrix.servico }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: [gateway, pedidos, estoque, pagamentos]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadados
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/pedidos-veloz-${{ matrix.servico }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: servicos/${{ matrix.servico }}/Dockerfile
+          push: true
+          tags: ${{ steps.metadados.outputs.tags }}
+          labels: ${{ steps.metadados.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+
+  implantar:
+    name: Implantar em produção
+    needs: publicar
+    if: ${{ vars.HABILITAR_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    environment: producao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.2
+      - name: Configurar acesso ao cluster
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG_B64" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Criar credenciais da aplicação
+        env:
+          POSTGRES_USUARIO: ${{ secrets.POSTGRES_USUARIO }}
+          POSTGRES_SENHA: ${{ secrets.POSTGRES_SENHA }}
+          RABBITMQ_USUARIO: ${{ secrets.RABBITMQ_USUARIO }}
+          RABBITMQ_SENHA: ${{ secrets.RABBITMQ_SENHA }}
+        run: |
+          kubectl apply -f k8s/base/namespace.yaml
+          kubectl -n pedidos-veloz create secret generic segredos-plataforma \
+            --from-literal=POSTGRES_USUARIO="$POSTGRES_USUARIO" \
+            --from-literal=POSTGRES_SENHA="$POSTGRES_SENHA" \
+            --from-literal=RABBITMQ_USUARIO="$RABBITMQ_USUARIO" \
+            --from-literal=RABBITMQ_SENHA="$RABBITMQ_SENHA" \
+            --from-literal=RABBITMQ_URL="amqp://$RABBITMQ_USUARIO:$RABBITMQ_SENHA@rabbitmq:5672/" \
+            --from-literal=BANCO_PEDIDOS_URL="postgresql+psycopg://$POSTGRES_USUARIO:$POSTGRES_SENHA@postgres:5432/pedidos" \
+            --from-literal=BANCO_ESTOQUE_URL="postgresql+psycopg://$POSTGRES_USUARIO:$POSTGRES_SENHA@postgres:5432/estoque" \
+            --from-literal=BANCO_PAGAMENTOS_URL="postgresql+psycopg://$POSTGRES_USUARIO:$POSTGRES_SENHA@postgres:5432/pagamentos" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Aplicar manifests e imagens da versão
+        env:
+          DONO: ${{ github.repository_owner }}
+        run: |
+          kubectl apply -k k8s/overlays/producao
+          TAG="sha-${GITHUB_SHA::7}"
+          for SERVICO in gateway pedidos estoque pagamentos; do
+            kubectl -n pedidos-veloz set image "deployment/$SERVICO" \
+              "$SERVICO=ghcr.io/$DONO/pedidos-veloz-$SERVICO:$TAG"
+          done
+      - name: Aguardar rolling update
+        run: |
+          falhou=0
+          for SERVICO in gateway pedidos estoque pagamentos; do
+            kubectl -n pedidos-veloz rollout status "deployment/$SERVICO" --timeout=5m || falhou=1
+          done
+          if [ "$falhou" -ne 0 ]; then
+            for SERVICO in gateway pedidos estoque pagamentos; do
+              kubectl -n pedidos-veloz rollout undo "deployment/$SERVICO"
+            done
+            exit 1
+          fi

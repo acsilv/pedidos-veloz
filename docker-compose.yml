@@ -1,0 +1,241 @@
+name: pedidos-veloz
+
+x-aplicacao: &aplicacao
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  networks:
+    - aplicacao
+    - observabilidade
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  environment: &ambiente-aplicacao
+    NIVEL_LOG: ${NIVEL_LOG:-INFO}
+    RABBITMQ_URL: amqp://${RABBITMQ_USUARIO:-veloz}:${RABBITMQ_SENHA:-troque-esta-senha}@rabbitmq:5672/
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    otel-collector:
+      condition: service_started
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USUARIO:-veloz}
+      POSTGRES_PASSWORD: ${POSTGRES_SENHA:-troque-esta-senha}
+      POSTGRES_DB: postgres
+    volumes:
+      - dados-postgres:/var/lib/postgresql/data
+      - ./docker/postgres/inicializar-bancos.sh:/docker-entrypoint-initdb.d/10-inicializar-bancos.sh:ro
+    networks:
+      - dados
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USUARIO:-veloz} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    command: >-
+      sh -c "rabbitmq-plugins enable --offline rabbitmq_prometheus && rabbitmq-server"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USUARIO:-veloz}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_SENHA:-troque-esta-senha}
+    volumes:
+      - dados-rabbitmq:/var/lib/rabbitmq
+    ports:
+      - "15672:15672"
+    networks:
+      - aplicacao
+      - observabilidade
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  gateway:
+    <<: *aplicacao
+    build:
+      context: .
+      dockerfile: servicos/gateway/Dockerfile
+    environment:
+      <<: *ambiente-aplicacao
+      URL_PEDIDOS: http://pedidos:8001
+      URL_ESTOQUE: http://estoque:8002
+    ports:
+      - "8000:8000"
+    depends_on:
+      pedidos:
+        condition: service_healthy
+      estoque:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/saude')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  pedidos:
+    <<: *aplicacao
+    build:
+      context: .
+      dockerfile: servicos/pedidos/Dockerfile
+    environment:
+      <<: *ambiente-aplicacao
+      BANCO_URL: postgresql+psycopg://${POSTGRES_USUARIO:-veloz}:${POSTGRES_SENHA:-troque-esta-senha}@postgres:5432/pedidos
+    networks:
+      - aplicacao
+      - dados
+      - observabilidade
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/saude')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  estoque:
+    <<: *aplicacao
+    build:
+      context: .
+      dockerfile: servicos/estoque/Dockerfile
+    environment:
+      <<: *ambiente-aplicacao
+      BANCO_URL: postgresql+psycopg://${POSTGRES_USUARIO:-veloz}:${POSTGRES_SENHA:-troque-esta-senha}@postgres:5432/estoque
+    networks:
+      - aplicacao
+      - dados
+      - observabilidade
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/saude')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  pagamentos:
+    <<: *aplicacao
+    build:
+      context: .
+      dockerfile: servicos/pagamentos/Dockerfile
+    environment:
+      <<: *ambiente-aplicacao
+      BANCO_URL: postgresql+psycopg://${POSTGRES_USUARIO:-veloz}:${POSTGRES_SENHA:-troque-esta-senha}@postgres:5432/pagamentos
+    networks:
+      - aplicacao
+      - dados
+      - observabilidade
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/saude')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.133.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observabilidade/otel-collector.yaml:/etc/otel/config.yaml:ro
+    networks:
+      - observabilidade
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./observabilidade/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observabilidade/alertas.yml:/etc/prometheus/alertas.yml:ro
+      - dados-prometheus:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - aplicacao
+      - observabilidade
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observabilidade/tempo.yaml:/etc/tempo.yaml:ro
+      - dados-tempo:/var/tempo
+    networks:
+      - observabilidade
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./observabilidade/loki.yaml:/etc/loki/local-config.yaml:ro
+      - dados-loki:/loki
+    networks:
+      - observabilidade
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.10.2
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    volumes:
+      - ./observabilidade/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dados-alloy:/var/lib/alloy/data
+    networks:
+      - observabilidade
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USUARIO:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_SENHA:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observabilidade/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidade/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - dados-grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - observabilidade
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    restart: unless-stopped
+
+networks:
+  aplicacao:
+  dados:
+    internal: true
+  observabilidade:
+
+volumes:
+  dados-postgres:
+  dados-rabbitmq:
+  dados-prometheus:
+  dados-tempo:
+  dados-loki:
+  dados-alloy:
+  dados-grafana:

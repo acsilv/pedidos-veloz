@@ -1,0 +1,109 @@
+name: Integração contínua
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualidade:
+    name: Código e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar dependências
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Verificar estilo
+        run: ruff check comum servicos testes
+      - name: Verificar tipagem dos contratos
+        run: mypy comum/eventos.py servicos/gateway/esquemas.py servicos/pedidos/esquemas.py servicos/estoque/esquemas.py servicos/pagamentos/esquemas.py
+      - name: Executar testes
+        run: >-
+          pytest
+          --cov=comum.eventos
+          --cov=servicos.pedidos.regras
+          --cov=servicos.estoque.regras
+          --cov=servicos.pagamentos.regras
+          --cov-report=term-missing
+          --cov-fail-under=85
+
+  configuracoes:
+    name: Compose, Kubernetes e Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Validar Docker Compose
+        run: docker compose --env-file .env.example config --quiet
+      - name: Montar e validar manifests
+        run: |
+          kubectl kustomize k8s/overlays/producao > manifestos-renderizados.yaml
+          docker run --rm -v "$PWD:/projeto" ghcr.io/yannh/kubeconform:v0.6.7 \
+            -strict -summary /projeto/manifestos-renderizados.yaml
+      - name: Validar Terraform
+        working-directory: infra/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false
+          terraform validate
+
+  seguranca:
+    name: Verificações de segurança
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Procurar segredos acidentais
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verificar arquivos e dependências
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  integracao:
+    name: Fluxo completo no Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Subir serviços necessários
+        run: >-
+          docker compose --env-file .env.example up -d --build
+          postgres rabbitmq otel-collector pedidos estoque pagamentos gateway
+      - name: Aguardar e testar pedido
+        run: |
+          for tentativa in $(seq 1 40); do
+            if curl --fail --silent http://localhost:8000/saude; then break; fi
+            sleep 3
+          done
+          python scripts/teste_smoke.py
+      - name: Mostrar logs em caso de falha
+        if: failure()
+        run: docker compose --env-file .env.example logs --no-color
+      - name: Encerrar ambiente
+        if: always()
+        run: docker compose --env-file .env.example down --volumes --remove-orphans

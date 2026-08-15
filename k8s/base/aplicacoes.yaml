@@ -1,0 +1,175 @@
+apiVersion: v1
+kind: Service
+metadata: {name: gateway, labels: {componente: gateway}}
+spec:
+  type: LoadBalancer
+  selector: {app: gateway}
+  ports: [{name: http, port: 80, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gateway}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector: {matchLabels: {app: gateway}}
+  template:
+    metadata:
+      labels: {app: gateway, componente: aplicacao}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/path: "/metricas/", prometheus.io/port: "8000"}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: gateway
+          image: ghcr.io/seu-usuario/pedidos-veloz-gateway:latest
+          ports: [{containerPort: 8000, name: http}]
+          envFrom: [{configMapRef: {name: configuracao-aplicacao}}]
+          readinessProbe: {httpGet: {path: /pronto, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /saude, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts: [{name: temporario, mountPath: /tmp}]
+      volumes: [{name: temporario, emptyDir: {sizeLimit: 64Mi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: pedidos, labels: {componente: pedidos}}
+spec: {selector: {app: pedidos}, ports: [{name: http, port: 8001, targetPort: 8001}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: pedidos}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app: pedidos}}
+  template:
+    metadata:
+      labels: {app: pedidos, componente: aplicacao}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/path: "/metricas/", prometheus.io/port: "8001"}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: pedidos
+          image: ghcr.io/seu-usuario/pedidos-veloz-pedidos:latest
+          ports: [{containerPort: 8001, name: http}]
+          envFrom: [{configMapRef: {name: configuracao-aplicacao}}]
+          env:
+            - {name: BANCO_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: BANCO_PEDIDOS_URL}}}
+            - {name: RABBITMQ_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: RABBITMQ_URL}}}
+          readinessProbe: {httpGet: {path: /pronto, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /saude, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 160Mi}, limits: {cpu: 500m, memory: 320Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts: [{name: temporario, mountPath: /tmp}]
+      volumes: [{name: temporario, emptyDir: {sizeLimit: 64Mi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: estoque, labels: {componente: estoque}}
+spec: {selector: {app: estoque}, ports: [{name: http, port: 8002, targetPort: 8002}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: estoque}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app: estoque}}
+  template:
+    metadata:
+      labels: {app: estoque, componente: aplicacao}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/path: "/metricas/", prometheus.io/port: "8002"}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: estoque
+          image: ghcr.io/seu-usuario/pedidos-veloz-estoque:latest
+          ports: [{containerPort: 8002, name: http}]
+          envFrom: [{configMapRef: {name: configuracao-aplicacao}}]
+          env:
+            - {name: BANCO_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: BANCO_ESTOQUE_URL}}}
+            - {name: RABBITMQ_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: RABBITMQ_URL}}}
+          readinessProbe: {httpGet: {path: /pronto, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /saude, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 160Mi}, limits: {cpu: 500m, memory: 320Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts: [{name: temporario, mountPath: /tmp}]
+      volumes: [{name: temporario, emptyDir: {sizeLimit: 64Mi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: pagamentos, labels: {componente: pagamentos}}
+spec: {selector: {app: pagamentos}, ports: [{name: http, port: 8003, targetPort: 8003}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: pagamentos}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app: pagamentos}}
+  template:
+    metadata:
+      labels: {app: pagamentos, componente: aplicacao}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/path: "/metricas/", prometheus.io/port: "8003"}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: pagamentos
+          image: ghcr.io/seu-usuario/pedidos-veloz-pagamentos:latest
+          ports: [{containerPort: 8003, name: http}]
+          envFrom: [{configMapRef: {name: configuracao-aplicacao}}]
+          env:
+            - {name: BANCO_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: BANCO_PAGAMENTOS_URL}}}
+            - {name: RABBITMQ_URL, valueFrom: {secretKeyRef: {name: segredos-plataforma, key: RABBITMQ_URL}}}
+          readinessProbe: {httpGet: {path: /pronto, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /saude, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 160Mi}, limits: {cpu: 500m, memory: 320Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts: [{name: temporario, mountPath: /tmp}]
+      volumes: [{name: temporario, emptyDir: {sizeLimit: 64Mi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: otel-collector, labels: {componente: observabilidade}}
+spec:
+  selector: {app: otel-collector}
+  ports: [{name: otlp-grpc, port: 4317, targetPort: 4317}, {name: otlp-http, port: 4318, targetPort: 4318}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: otel-collector}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: otel-collector}}
+  template:
+    metadata: {labels: {app: otel-collector, componente: observabilidade}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.133.0
+          args: ["--config=/etc/otel/config.yaml"]
+          ports: [{containerPort: 4317, name: otlp-grpc}, {containerPort: 4318, name: otlp-http}]
+          volumeMounts: [{name: configuracao, mountPath: /etc/otel/config.yaml, subPath: config.yaml, readOnly: true}]
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      volumes: [{name: configuracao, configMap: {name: configuracao-otel}}]

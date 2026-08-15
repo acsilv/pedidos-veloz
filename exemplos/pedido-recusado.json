@@ -1,0 +1,7 @@
+{
+  "cliente_id": "cliente-demonstracao",
+  "token_pagamento": "RECUSAR",
+  "itens": [
+    {"sku": "SKU-TENIS", "quantidade": 1, "preco_unitario": "249.90"}
+  ]
+}
