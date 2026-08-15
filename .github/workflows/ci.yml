@@ -17,7 +17,7 @@ jobs:
     name: Código e testes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -42,7 +42,7 @@ jobs:
     name: Compose, Kubernetes e Terraform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.31.2
@@ -67,7 +67,7 @@ jobs:
     name: Verificações de segurança
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Procurar segredos acidentais
@@ -86,7 +86,7 @@ jobs:
     name: Fluxo completo no Compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
